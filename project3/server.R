@@ -19,7 +19,27 @@ library(readr)
 library(dplyr)
 library(corrplot)
 library(purrr)
-c <- read_csv("coffee_data.csv") %>% select(c(-Lot.Number,-ICO.Number, -...1)) %>% mutate(Owner=coalesce(Owner, Farm.Name)) %>% mutate(Region=coalesce(Region, Country.of.Origin)) 
+library(Formula)
+library(DT)
+library(randomForest)
+library(varImp)
+c <- read_csv("coffee_data.csv") %>% mutate(across(where(is.character),as_factor)) %>% select(c(-Lot.Number,-ICO.Number, -...1)) %>% mutate(Owner=coalesce(Owner, Farm.Name)) %>% mutate(Region=coalesce(Region, Country.of.Origin)) %>%
+    rename(coo = Country.of.Origin,
+           var = Variety,
+           pm = Processing.Method) %>%
+    mutate(coo = str_replace_all(coo, " ", "_"),
+           coo = str_replace_all(coo, "\\(", ""),
+           coo = str_replace_all(coo, "\\)", ""),
+           var = str_replace_all(var, " ", "_"),
+           pm = str_replace_all(pm, " ", "_"),
+           pm = str_replace_all(pm, "_\\/", ""),
+           pm = str_replace_all(pm, "-", ""))
+
+model_data <- c %>% mutate(across(where(is.character),as_factor)) %>%
+    filter(is.na(coo) == FALSE,
+           is.na(var) == FALSE,
+           is.na(Owner) == FALSE)
+
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
@@ -29,7 +49,7 @@ server <- function(input, output, session) {
         
         #code for barchart selection
         if(input$plot == "Barchart"){
-            ggplot(data = c, aes_string(x = input$var)) + geom_bar(aes_string(fill = as.factor(input$var)), position = "dodge") + labs(x = "Coffee" [input$var], y = "Count", title="Distribution of" [input$var]) + scale_fill_discrete(name = "")+ guides(x= guide_axis(angle=input$wordangle))
+            ggplot(data = c, aes_string(x = input$var)) + geom_bar(aes_string(fill = input$var), position = "dodge") + labs(x = "Coffee" [input$var], y = "Count", title="Distribution of" [input$var]) + scale_fill_discrete(name = "")+ guides(x= guide_axis(angle=input$wordangle))
         }
         
         #code for Variable Correlation
@@ -47,7 +67,7 @@ server <- function(input, output, session) {
         #code for Histogram
         else if(input$plot == "Histogram"){
             ggplot(c, aes_string(x=input$var)) + 
-                geom_histogram(bins = input$boxhist, color="darkgreen", fill="green", binwidth = 3) + 
+                geom_histogram(bins = input$hist, color="darkgreen", fill="green", binwidth = 3, stat = "count") + 
                 guides(x= guide_axis(angle=input$wordangle))
         }
         
@@ -59,13 +79,7 @@ server <- function(input, output, session) {
                 coord_flip(ylim = c(67, 90))
         }
         
-        #code for dynamic slider for boxplot and barchart UI id = boxhist
-        #observeEvent(input$boxhist, {
-        #    updateSliderInput(inputId = "n", min = input$var)
-        #})  
-        #observeEvent(input$max, {
-         #   updateSliderInput(inputId = "n", max = input$var)
-        #})
+        
         
     })
         
@@ -84,6 +98,122 @@ server <- function(input, output, session) {
         
     })
     
+########################### Modeling Tab
+
+##########################Model Fitting Tab
+    
+# Test / Train Data slider inputs
+    
+    # when test changes, update train
+    observeEvent(input$test,  {
+        updateSliderInput(session = session, inputId = "train", value = 1 - input$test)
+    })
+    
+    # when train changes, update test
+    observeEvent(input$train,  {
+        updateSliderInput(session = session, inputId = "test", value = 1 - input$train)
+    })
+    
+# Create Data Partition for all models based on slider inputs
+    
+    ctrainindex <- eventReactive(input$go, {
+        createDataPartition(model_data$Total.Cup.Points, p = input$train, list = FALSE)
+    
+    ctrain <- model_data[ctrainindex, ]
+    ctest <-  model_data[-ctrainindex, ]
+    })
+    
+    
+# Lm Model 
+    
+        cFit1 <- eventReactive(input$go, {
+    train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain, method = "lm",
+                  trControl = trainControl(method = "cv", number = input$cv),
+                   na.action = na.pass,
+                   preProcess = c("center", "scale"))
+        
+   })
+    
+    #pred1 <- predict(cFit1, newdata = ctest)
+    
+    #m1Results <- postResample(pred1, obs = ctest$Total.Cup.Points)
+
+   #Lm summary 
+    output$lm <- renderPrint({
+    (cFit1())
+    })
+    
+
+    
+# Classification Tree
+    
+    ctree <- eventReactive(input$go, {
+        train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain,
+                 method = "rpart",
+                 preProcess = c("center", "scale"),
+                 trControl = trainControl(method = "repeatedcv", repeats = input$rpt,
+                                          number = input$cv),
+                 na.action=na.roughfix,
+                 tuneGrid = expand.grid(cp = (.interaction.depth = seq(0, .1, by = .001))))
+    })
+  
+# Classification Tree Summary      
+    output$clt <- renderPrint({
+        (ctree())
+    })
+    
+#Random Forest Model
+
+    rfFit <- eventReactive(input$go, {
+        train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain, method = "rf",
+                   preProcess = c("center", "scale"),
+                   trControl = trainControl(method = "cv", number = input$cv),
+                   tuneGrid = expand.grid(mtry = input$mtry))
+    })
+    
+    #Random Forest Summary
+    output$rfp <- renderText({
+        (rfFit())
+    })
+    
+    #Random Forest Model Plot
+    output$rf <- renderPlot({
+        plot(rfFit())
+    })
+        
+    
+        
+    
+
+#Action Button
+    
+    
+#################################Prediction Tab
+    
+    
+
+################################Data Tab
+    #ref https://shiny.rstudio.com/articles/download.html for code
+    
+    # choose columns to display
+    c2 = c[sample(nrow(c), 1000), ]
+    output$datat <- DT::renderDataTable({
+        DT::datatable(c[, input$show_vars, drop = FALSE])
+    })
+    
+
+    #Downloadable csv of selected dataset
+    output$downloadData <- downloadHandler(
+        filename = function() {
+            paste("Coffee Data", ".csv", sep="")
+        },
+        
+        content = function(file) {
+            write.csv(c, file, row.names = FALSE)
+        }
+    )
+    
+   
     
     
 }
@@ -92,7 +222,4 @@ server <- function(input, output, session) {
     
     
     
-    # code for digits
-    #d <- input$digit
-    #tab[ ,3] <- round(tab[ ,3], digits = d)
-
+    
