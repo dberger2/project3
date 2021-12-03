@@ -23,22 +23,27 @@ library(Formula)
 library(DT)
 library(randomForest)
 library(varImp)
-c <- read_csv("coffee_data.csv") %>% mutate(across(where(is.character),as_factor)) %>% select(c(-Lot.Number,-ICO.Number, -...1)) %>% mutate(Owner=coalesce(Owner, Farm.Name)) %>% mutate(Region=coalesce(Region, Country.of.Origin)) %>%
-    rename(coo = Country.of.Origin,
-           var = Variety,
-           pm = Processing.Method) %>%
-    mutate(coo = str_replace_all(coo, " ", "_"),
-           coo = str_replace_all(coo, "\\(", ""),
-           coo = str_replace_all(coo, "\\)", ""),
-           var = str_replace_all(var, " ", "_"),
-           pm = str_replace_all(pm, " ", "_"),
-           pm = str_replace_all(pm, "_\\/", ""),
-           pm = str_replace_all(pm, "-", ""))
+library(shinycssloaders)
 
-model_data <- c %>% mutate(across(where(is.character),as_factor)) %>%
-    filter(is.na(coo) == FALSE,
-           is.na(var) == FALSE,
-           is.na(Owner) == FALSE)
+#Data for Data Exploration
+c <- read_csv("coffee_data.csv") %>% mutate(across(where(is.character),as_factor)) %>% select(c(-Lot.Number,-ICO.Number, -...1)) %>% mutate(Owner=coalesce(Owner, Farm.Name)) %>% mutate(Region=coalesce(Region, Country.of.Origin))
+
+#Data for modeling
+c2 <- c %>% rename(coo = Country.of.Origin,
+                   var = Variety,
+                   pm = Processing.Method) %>%
+  mutate(coo = str_replace_all(coo, " ", "_"),
+         coo = str_replace_all(coo, "\\(", ""),
+         coo = str_replace_all(coo, "\\)", ""),
+         var = str_replace_all(var, " ", "_"),
+         pm = str_replace_all(pm, " ", "_"),
+         pm = str_replace_all(pm, "_\\/", ""),
+         pm = str_replace_all(pm, "-", ""))
+
+model_data <- c2 %>% mutate(across(where(is.character),as_factor)) %>%
+  filter(is.na(coo) == FALSE,
+         is.na(var) == FALSE,
+         is.na(Owner) == FALSE)
 
 
 # Define server logic required to draw a histogram
@@ -66,8 +71,8 @@ server <- function(input, output, session) {
         
         #code for Histogram
         else if(input$plot == "Histogram"){
-            ggplot(c, aes_string(x=input$var)) + 
-                geom_histogram(bins = input$hist, color="darkgreen", fill="green", binwidth = 3, stat = "count") + 
+                ggplot(c, aes_string(x=input$var)) + 
+                geom_histogram(bins = input$hist, col = 'darkgray', border = 'white', binwidth = 3, stat = "count") + 
                 guides(x= guide_axis(angle=input$wordangle))
         }
         
@@ -102,6 +107,23 @@ server <- function(input, output, session) {
 
 ##########################Model Fitting Tab
     
+### Modeling Info Tab
+    
+    output$ex1 <- renderUI({
+      withMathJax(
+        helpText('Multiple Linear Model Equation $$y_{i}=\\beta_{0}+\\beta+\\beta_{1}{x}_{i1}+\\cdots+\\beta_{p}x_{ip}+\\varepsilon_{i}$$'))
+    })
+    output$ex2 <- renderUI({
+      withMathJax(
+        helpText('Gini Impurity for Classification Tree $$\\sum_{k \\neq i} p_{k}=1-p_{i}$$')
+      )
+    })
+    
+    output$ex3 <- renderUI({
+      withMathJax(
+        helpText('Bagging $$\\hat {f} = \\frac {1}{B}\\sum_{b=1}^{B} f_{b}(x^`)$$'))
+    })
+    
 # Test / Train Data slider inputs
     
     # when test changes, update train
@@ -118,37 +140,35 @@ server <- function(input, output, session) {
     
     ctrainindex <- eventReactive(input$go, {
         createDataPartition(model_data$Total.Cup.Points, p = input$train, list = FALSE)
-    
-    ctrain <- model_data[ctrainindex, ]
-    ctest <-  model_data[-ctrainindex, ]
     })
+    
+    ctrain <- reactive({model_data[ctrainindex(), ]})
+    
+    
+    ctest <- reactive({model_data[-ctrainindex(), ]})
     
     
 # Lm Model 
     
         cFit1 <- eventReactive(input$go, {
-    train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain, method = "lm",
+    train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain(), method = "lm",
                   trControl = trainControl(method = "cv", number = input$cv),
                    na.action = na.pass,
                    preProcess = c("center", "scale"))
-        
-   })
-    
-    #pred1 <- predict(cFit1, newdata = ctest)
-    
-    #m1Results <- postResample(pred1, obs = ctest$Total.Cup.Points)
+ 
+})
 
-   #Lm summary 
+        
+   #Linear Model Summary 
     output$lm <- renderPrint({
     (cFit1())
     })
     
 
-    
 # Classification Tree
     
     ctree <- eventReactive(input$go, {
-        train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain,
+        train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain(),
                  method = "rpart",
                  preProcess = c("center", "scale"),
                  trControl = trainControl(method = "repeatedcv", repeats = input$rpt,
@@ -156,7 +176,7 @@ server <- function(input, output, session) {
                  na.action=na.roughfix,
                  tuneGrid = expand.grid(cp = (.interaction.depth = seq(0, .1, by = .001))))
     })
-  
+    
 # Classification Tree Summary      
     output$clt <- renderPrint({
         (ctree())
@@ -165,28 +185,52 @@ server <- function(input, output, session) {
 #Random Forest Model
 
     rfFit <- eventReactive(input$go, {
-        train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain, method = "rf",
+        train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln,input$varselc), collapse="+"))), data = ctrain(), method = "rf",
                    preProcess = c("center", "scale"),
                    trControl = trainControl(method = "cv", number = input$cv),
-                   tuneGrid = expand.grid(mtry = input$mtry))
-    })
+                   tuneGrid = expand.grid(mtry = (input$mtry[1]):(input$mtry[2])))
+      
+      })
+    
     
     #Random Forest Summary
-    output$rfp <- renderText({
+    output$rfp <- renderPrint({
         (rfFit())
     })
     
     #Random Forest Model Plot
     output$rf <- renderPlot({
-        plot(rfFit())
+      ggplot(rfFit())
     })
-        
     
-        
+    #Test results
+    output$lmt <- renderPrint({
+      lm1Results()
+    })
     
+    output$ctt <- renderPrint({
+      ctreeResults()
+    })
+    
+    output$rft <- renderPrint({
+      rfResults()
+    })
+      
 
-#Action Button
+#test results for linear regression model
     
+    lmpred <- reactive({predict(cFit1(), newdata = ctest())})
+    lm1Results <- reactive({postResample(lmpred(), obs = ctest()$Total.Cup.Points)})
+
+#test results for classification tree model
+    
+    ctPred <- reactive({predict(ctree(), newdata = ctest())})
+    ctreeResults <- reactive({postResample(ctPred(), obs = ctest()$Total.Cup.Points)})
+
+#test results for Random Forest Model
+    
+    rfPred <- reactive({predict(rfFit(), newdata = ctest())})
+    rfResults <- reactive({postResample(rfPred(), obs = ctest()$Total.Cup.Points)})
     
 #################################Prediction Tab
     
