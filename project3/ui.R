@@ -184,7 +184,7 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                   h5("Test Results"),
                                   h6("Linear Model Test Results"),
                                   verbatimTextOutput("lmt"),
-                                  h6("Classification Model Test Results"),
+                                  h6("Classification Tree Test Results"),
                                   verbatimTextOutput("ctt"),
                                   h6("Random Forest Test Results"),
                                   verbatimTextOutput("rft")
@@ -198,6 +198,11 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                                        c("Linear Regression Model",
                                                          "Classification Tree",
                                                          "Random Forest")),
+                                  h5("Model Prediction Plot"),
+                                  plotOutput("modp"),
+                                  h5 ("Mean Abosolute Error for Test Set"),
+                                  verbatimTextOutput("mae"),
+                                  
                                 )
                                )
                              )
@@ -214,7 +219,7 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                           downloadButton("downloadData", "Download")
                     ),
                              mainPanel("This is the Main",
-                              dataTableOutput("datat")
+                              DT::DTOutput("datat")
                              )
 
                     )

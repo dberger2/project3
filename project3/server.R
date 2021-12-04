@@ -111,7 +111,7 @@ server <- function(input, output, session) {
     
     output$ex1 <- renderUI({
       withMathJax(
-        helpText('Multiple Linear Model Equation $$y_{i}=\\beta_{0}+\\beta+\\beta_{1}{x}_{i1}+\\cdots+\\beta_{p}x_{ip}+\\varepsilon_{i}$$'))
+        helpText('Multiple Linear Model Equation $$y_{i}=\\beta_{0}+\\beta_{1}{x}_{i1}+\\cdots+\\beta_{p}x_{ip}+\\varepsilon_{i}$$'))
     })
     output$ex2 <- renderUI({
       withMathJax(
@@ -232,20 +232,78 @@ server <- function(input, output, session) {
     rfPred <- reactive({predict(rfFit(), newdata = ctest())})
     rfResults <- reactive({postResample(rfPred(), obs = ctest()$Total.Cup.Points)})
     
+    
 #################################Prediction Tab
+#plots for each model    
+    output$modp <- renderPlot({
+      
+      #plot for linear regression model
+      if(input$predm == "Linear Regression Model"){
+      
+      ggplot(ctest(), aes(lmpred(), ctest()$Total.Cup.Points)) + geom_point(colour = "tan3") + 
+      geom_abline(slope = 1, intercept = 0) +
+      theme_bw() + ggtitle("Test Set Predictions for Total.Cup.Points", 
+                           subtitle = "Final Linear Regression Model") + 
+      labs(x = "Prediction", y = "Actual")
+        
+      }
+      #plot for classification tree
+      else if(input$predm == "Classification Tree"){
+        ggplot(ctest(), aes(ctPred(), ctest()$Total.Cup.Points)) + geom_point(colour = "tan3") + 
+          geom_abline(slope = 1, intercept = 0) +
+          theme_bw() + ggtitle("Test Set Predictions for Total.Cup.Points", 
+                               subtitle = "Final Classification Tree Model") + 
+          labs(x = "Prediction", y = "Actual")
+        
+      }
+      #plot for random forest
+      else if(input$predm == "Random Forest"){
+        ggplot(ctest(), aes(rfPred(), ctest()$Total.Cup.Points)) + geom_point(colour = "tan3") + 
+          geom_abline(slope = 1, intercept = 0) +
+          theme_bw() + ggtitle("Test Set Predictions for Total.Cup.Points", 
+                               subtitle = "Final Random Forest Model") + 
+          labs(x = "Prediction", y = "Actual")
+        
+      }
+      
+    })
+  #MAE for each model plot  
+  output$mae <- renderPrint({
     
-    
+    #MAE for linear regression model
+    if(input$predm == "Linear Regression Model"){
+      
+      MAE(ctest()$Total.Cup.Points, lmpred())
+      
+    }
+    #MAE for classification tree
+    else if(input$predm == "Classification Tree"){
+      
+      MAE(ctest()$Total.Cup.Points, ctPred())
+      
+    }
+    #MAE for Random forest
+    else if(input$predm == "Random Forest"){
+      
+      MAE(ctest()$Total.Cup.Points, rfPred())
+      
+    }
 
+  })
+    
 ################################Data Tab
     #ref https://shiny.rstudio.com/articles/download.html for code
     
+    #reactive expression for the data
+    d <- reactive(c)
+ 
     # choose columns to display
-    c2 = c[sample(nrow(c), 1000), ]
-    output$datat <- DT::renderDataTable({
-        DT::datatable(c[, input$show_vars, drop = FALSE])
+    d2 <- reactive(d()[sample(nrow(d()), 1000), ])
+    
+    output$datat <- DT::renderDT({
+        DT::datatable(d2()[, input$show_vars, drop = FALSE])
     })
     
-
     #Downloadable csv of selected dataset
     output$downloadData <- downloadHandler(
         filename = function() {
@@ -253,7 +311,7 @@ server <- function(input, output, session) {
         },
         
         content = function(file) {
-            write.csv(c, file, row.names = FALSE)
+            write.csv(d2(), file, row.names = FALSE)
         }
     )
     
