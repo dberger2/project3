@@ -16,6 +16,7 @@ library(readr)
 library(dplyr)
 library(purrr)
 library(DT)
+library(randomForest)
 
 #Data for Data Exploration
 c <- read_csv("coffee_data.csv") %>% mutate(across(where(is.character),as_factor)) %>% select(c(-Lot.Number,-ICO.Number, -...1)) %>% mutate(Owner=coalesce(Owner, Farm.Name)) %>% mutate(Region=coalesce(Region, Country.of.Origin))
@@ -130,7 +131,7 @@ server <- function(input, output, session) {
     ctest <- reactive({model_data[-ctrainindex(), ]})
     
     
-# Lm Model 
+# Linear Regression Model 
     
         cFit1 <- eventReactive(input$go, {
     train(as.formula(paste("Total.Cup.Points~",paste(c(input$varseln), collapse="+"))), data = ctrain(), method = "lm",
@@ -141,7 +142,7 @@ server <- function(input, output, session) {
 })
 
         
-   #Linear Model Summary 
+   #Linear Regression Model Summary 
     output$lm <- renderPrint({
     (cFit1())
     })
@@ -155,7 +156,7 @@ server <- function(input, output, session) {
                  preProcess = c("center", "scale"),
                  trControl = trainControl(method = "repeatedcv", repeats = input$rpt,
                                           number = input$cv),
-                 na.action=na.roughfix,
+                 na.action = na.roughfix,
                  tuneGrid = expand.grid(cp = (.interaction.depth = seq(0, .1, by = .001))))
     })
     
@@ -274,17 +275,19 @@ server <- function(input, output, session) {
   })
     
 ################################Data Tab
-    #ref https://shiny.rstudio.com/articles/download.html for code
     
     #reactive expression for the data
     d <- reactive(c)
  
     # choose columns to display
+
     d2 <- reactive(d()[sample(nrow(d()), 1000), ])
     
-    output$datat <- DT::renderDT({
-        DT::datatable(d2()[, input$show_vars, drop = FALSE])
+    #rendered datatable
+    output$datat <- DT::renderDataTable({
+        DT::datatable(d2()[, input$show_vars, drop = FALSE], filter = "top")
     })
+    
     
     #Downloadable csv of selected dataset
     output$downloadData <- downloadHandler(
@@ -293,7 +296,7 @@ server <- function(input, output, session) {
         },
         
         content = function(file) {
-            write.csv(d2(), file, row.names = FALSE)
+            write.csv(d2()[ ,input$show_vars, drop = FALSE], file, row.names = FALSE)
         }
     )
     

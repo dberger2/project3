@@ -17,6 +17,7 @@ library(readr)
 library(dplyr)
 library(purrr)
 library(DT)
+library(randomForest)
 
 #Data for Data Exploration
 c <- read_csv("coffee_data.csv") %>% mutate(across(where(is.character),as_factor)) %>% select(c(-Lot.Number,-ICO.Number, -...1)) %>% mutate(Owner=coalesce(Owner, Farm.Name)) %>% mutate(Region=coalesce(Region, Country.of.Origin))
@@ -41,7 +42,7 @@ model_data <- c2 %>% mutate(across(where(is.character),as_factor)) %>%
 # Define UI for application that draws a histogram
 
 ui <- fluidPage(theme = shinytheme("cerulean"),
-                navbarPage("Exploration and Modeling of Coffee Data",
+                navbarPage("Coffee Data Exploration and Modeling",
                 tabsetPanel(
                   
 #############################About Tab
@@ -98,7 +99,7 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                        h4("Graphical Summary of Selected Variable"),
                                        plotOutput("plot"),
                                        conditionalPanel(condition = "input.plot == 'Variable Correlation'",
-                                                        h4("This is the variable correlation with the repsonse variable total.cup.points"),
+                                                        h4("This is the correlation of the selectvariable with the repsonse variable Total.Cup.Points"),
                                                         verbatimTextOutput("corr")
                                        )
                              )
@@ -152,16 +153,31 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                            
                                            actionButton("go", "Fit Models")
                                 ),
-                                #mainpanel for model fitting tab
+                              #mainpanel for model fitting tab
                               mainPanel(
                                 fluidPage(
                                   fluidRow(
-                                    box(width=8,
+                                    h5("Test Results"),
+                                    column(4,
+                                           h6("Linear Model Test Results"),
+                                           verbatimTextOutput("lmt"),
+                                    ),
+                                    column(4,
+                                           h6("Classification Tree Test Results"),
+                                           verbatimTextOutput("ctt"),
+                                    ),
+                                    column(4,
+                                           h6("Random Forest Test Results"),
+                                           verbatimTextOutput("rft"),
+                                    )
+                                  ),
+                                  fluidRow(
+                                    box(width=7,
                                           h5("Random Forest Plot"),
                                          plotOutput("rf"),
                                          ),
                                     
-                                    box(width=4,
+                                    box(width=5,
                                         h5("Random Forest Summary"),
                                          verbatimTextOutput("rfp"),
                                          ),
@@ -177,21 +193,7 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                          verbatimTextOutput("clt")
                                          )
                                   ),
-                                  fluidRow(
-                                    h5("Test Results"),
-                                    column(4,
-                                           h6("Linear Model Test Results"),
-                                           verbatimTextOutput("lmt"),
-                                           ),
-                                    column(4,
-                                           h6("Classification Tree Test Results"),
-                                           verbatimTextOutput("ctt"),
-                                           ),
-                                    column(4,
-                                           h6("Random Forest Test Results"),
-                                           verbatimTextOutput("rft"),
-                                           )
-                                    )
+                                  
                                 )
                                   
                               )
@@ -217,16 +219,18 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                     ),
                     
 ####################################################################Data Tab
-                    #refer to this https://mastering-shiny.org/action-dynamic.html#dynamic-filter
+                    
                     tabPanel("Data",
-                             sidebarPanel("This is the side",
-                                          #check boxes to select columns to view
-                                          checkboxGroupInput("show_vars", "Columns in the Coffee Dataset to show:",
+                             sidebarPanel(
+                               #button to download CSV file
+                               downloadButton("downloadData", "Download CSV File"),
+                               br(),
+                               #check boxes to select columns to view
+                                          checkboxGroupInput("show_vars", "Select Variables to Display/ Remove in the Dataset:",
                                                              names(c), selected = names(c)),
-                                          #button to download CSV file
-                                          downloadButton("downloadData", "Download")
+                                          
                     ),
-                             mainPanel("This is the Main",
+                             mainPanel(
                               DT::DTOutput("datat")
                              )
 

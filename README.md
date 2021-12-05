@@ -20,7 +20,7 @@ library(DT)
 
 3) Line of code that will install all packages used:
 
-install.packages(c("shiny", "shinydashboard", "shinythemes", "tidyverse", "ggplot2", "caret", "readr", "dplyr", "purrr", "DT",))
+install.packages(c("shiny", "shinydashboard", "shinythemes", "tidyverse", "ggplot2", "caret", "readr", "dplyr", "purrr", "DT", "randomForest"))
 
 4) Line of code to run the application:
 
