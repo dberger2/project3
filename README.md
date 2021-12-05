@@ -17,6 +17,7 @@ library(readr)
 library(dplyr)
 library(purrr)
 library(DT)
+library(randomForest)
 
 3) Line of code that will install all packages used:
 
